@@ -1,5 +1,7 @@
 #include "map.h" 
 #include <iostream> 
+#include <sstream>
+#include "view.h"
 
 
 using namespace sf;
@@ -7,10 +9,11 @@ using namespace sf;
 class Character
 {
 private:
-	float X, Y;
+	float x, y;
 public:
-	float x, y, w, h, dx, dy, speed;					//координаты игрока х и у, высота ширина, ускорение (по х и по у), сама скорость
-	int dir;											//направление (direction) движения игрока
+	float  w, h, dx, dy, speed;					//координаты игрока х и у, высота ширина, ускорение (по х и по у), сама скорость
+	int dir, playScore, health;											//направление (direction) движения игрока
+	bool life;
 	std::string File;										//name of file with extension
 	Image image;										//сфмл изображение
 	Texture texture;									//сфмл текстура
@@ -19,7 +22,9 @@ public:
 
 	Character(std::string F, float X, float Y, float W, float H)
 	{														//Конструктор с параметрами(формальными) для класса Player. При создании объекта класса мы будем задавать имя файла, координату Х и У, ширину и высоту
-		dx = 0; dy = 0; speed = 0; dir = 0;
+		dir = 0; playScore = 0;
+		dx = 0; dy = 0; speed = 0; health = 100;
+		life = true;
 		File = F;											//имя файла+расширение
 		w = W; h = H;										//высота и ширина
 		image.loadFromFile("Images/" + File);				//запихиваем в image наше изображение вместо File мы передадим то, что пропишем при создании объекта. В нашем случае "hero.png" и получится запись идентичная image.loadFromFile("images/hero/png");
@@ -44,17 +49,70 @@ public:
 		y += dy * time;//аналогично по игреку
 
 		speed = 0;//зануляем скорость, чтобы персонаж остановился.
-		sprite.setPosition(x, y); //выводим спрайт в позицию x y , посередине. бесконечно выводим в этой функции, иначе бы наш спрайт стоял на месте.
+		sprite.setPosition(x, y);
+		interactionWithMap();//выводим спрайт в позицию x y , посередине. бесконечно выводим в этой функции, иначе бы наш спрайт стоял на месте.
+		
+		if (health <= 0) life = false;
 	}
 
 	float getPlayerPositionX()
 	{
-		return X;
+		return x;
 	}
 
 	float getPlayerPositionY()
 	{
-		return Y;
+		return y;
+	}
+
+	void interactionWithMap()//ф-ция взаимодействия с картой
+	{
+
+		for (int i = y / 32; i < (y + h) / 32; i++)//проходимся по тайликам, контактирующим с игроком, то есть по всем квадратикам размера 32*32, которые мы окрашивали в 9 уроке. про условия читайте ниже.
+			for (int j = x / 32; j < (x + w) / 32; j++)//икс делим на 32, тем самым получаем левый квадратик, с которым персонаж соприкасается. (он ведь больше размера 32*32, поэтому может одновременно стоять на нескольких квадратах). А j<(x + w) / 32 - условие ограничения координат по иксу. то есть координата самого правого квадрата, который соприкасается с персонажем. таким образом идем в цикле слева направо по иксу, проходя по от левого квадрата (соприкасающегося с героем), до правого квадрата (соприкасающегося с героем)
+			{
+				if (TileMap[i][j] == '0')//если наш квадратик соответствует символу 0 (стена), то проверяем "направление скорости" персонажа:
+				{
+					if (dy > 0)//если мы шли вниз,
+					{
+						y = i * 32 - h;//то стопорим координату игрек персонажа. сначала получаем координату нашего квадратика на карте(стены) и затем вычитаем из высоты спрайта персонажа.
+					}
+					if (dy < 0)
+					{
+						y = i * 32 + 32;//аналогично с ходьбой вверх. dy<0, значит мы идем вверх (вспоминаем координаты паинта)
+					}
+					if (dx > 0)
+					{
+						x = j * 32 - w;//если идем вправо, то координата Х равна стена (символ 0) минус ширина персонажа
+					}
+					if (dx < 0)
+					{
+						x = j * 32 + 32;//аналогично идем влево
+					}
+				}
+
+
+				if (TileMap[i][j] == '1')
+				{ //если символ равен 's' (камень)
+					playScore++;//какое то действие... например телепортация героя
+					TileMap[i][j] = ' ';//убираем камень, типа взяли бонус. можем и не убирать, кстати.
+				}
+
+
+
+				if (TileMap[i][j] == 'm') 
+				{ //если символ равен 's' (камень)
+					health = health - 40;//какое то действие... например телепортация героя
+					TileMap[i][j] = ' ';//убираем камень, типа взяли бонус. можем и не убирать, кстати.
+				}
+
+
+				if (TileMap[i][j] == 'h')
+				{ //если символ равен 's' (камень)
+					health = health + 40;//какое то действие... например телепортация героя
+					TileMap[i][j] = ' ';//убираем камень, типа взяли бонус. можем и не убирать, кстати.
+				}
+			}
 	}
 };
 
@@ -71,13 +129,20 @@ int main()
 {
 
 
-	RenderWindow window(VideoMode(600, 600), "2D Game");
-
+	RenderWindow window(VideoMode(640, 480), "2D Game");
+	view.reset(FloatRect(0, 0, 640, 480));
 	// Create Character 
 
+	Font font; font.loadFromFile("CenturyGothic.ttf");
+
+	Text text("", font, 20);
+	text.setFillColor(Color::Black);							//???????????????????????????????????????????????????
+	text.setStyle(Text::Bold);
 
 	Image mapImage; mapImage.loadFromFile("Images/tiles.png");
+
 	Texture map; map.loadFromImage(mapImage);
+	
 	Sprite mapSprite; mapSprite.setTexture(map);
 
 
@@ -109,52 +174,68 @@ int main()
 
 
 			///////////////////////////////////////////Управление персонажем с анимацией////////////////////////////////////////////////////////////////////////
-		if ((Keyboard::isKeyPressed(Keyboard::A)))
+		if (Hero.life)
 		{
-			Hero.dir = 1; Hero.speed = 0.1;//dir =1 - направление вверх, speed =0.1 - скорость движения. Заметьте - время мы уже здесь ни на что не умножаем и нигде не используем каждый раз
-			HeroCurrentFrame += 0.0085 * time;
-			if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
-			Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 48, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
+
+			if ((Keyboard::isKeyPressed(Keyboard::A)))
+			{
+				Hero.dir = 1; Hero.speed = 0.1;//dir =1 - направление вверх, speed =0.1 - скорость движения. Заметьте - время мы уже здесь ни на что не умножаем и нигде не используем каждый раз
+				HeroCurrentFrame += 0.0085 * time;
+				if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
+				Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 48, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
+			}
+
+			if ((Keyboard::isKeyPressed(Keyboard::D))) {
+				Hero.dir = 0; Hero.speed = 0.1;//направление вправо, см выше
+				HeroCurrentFrame += 0.0085 * time;
+				if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
+				Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 96, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
+
+			}
+
+			if ((Keyboard::isKeyPressed(Keyboard::W))) {
+				Hero.dir = 3; Hero.speed = 0.1;//направление вниз, см выше
+				HeroCurrentFrame += 0.0085 * time;
+				if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
+				Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 144, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
+
+			}
+
+			if ((Keyboard::isKeyPressed(Keyboard::S)))
+			{ //если нажата клавиша стрелка влево или англ буква А
+				Hero.dir = 2; Hero.speed = 0.1;//направление вверх, см выше
+				HeroCurrentFrame += 0.0085 * time; //служит для прохождения по "кадрам". переменная доходит до трех суммируя произведение времени и скорости. изменив 0.005 можно изменить скорость анимации
+				if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3; //проходимся по кадрам с первого по третий включительно. если пришли к третьему кадру - откидываемся назад.
+				Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 0, 48, 48)); //проходимся по координатам Х. получается 96,96*2,96*3 и опять 96
+
+			}
 		}
-
-		if ((Keyboard::isKeyPressed(Keyboard::D))) {
-			Hero.dir = 0; Hero.speed = 0.1;//направление вправо, см выше
-			HeroCurrentFrame += 0.0085 * time;
-			if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
-			Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 96, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
-		}
-
-		if ((Keyboard::isKeyPressed(Keyboard::W))) {
-			Hero.dir = 3; Hero.speed = 0.1;//направление вниз, см выше
-			HeroCurrentFrame += 0.0085 * time;
-			if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3;
-			Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 144, 48, 48)); //через объект p класса player меняем спрайт, делая анимацию (используя оператор точку)
-
-		}
-
-		if ((Keyboard::isKeyPressed(Keyboard::S)))
-		{ //если нажата клавиша стрелка влево или англ буква А
-			Hero.dir = 2; Hero.speed = 0.1;//направление вверх, см выше
-			HeroCurrentFrame += 0.0085 * time; //служит для прохождения по "кадрам". переменная доходит до трех суммируя произведение времени и скорости. изменив 0.005 можно изменить скорость анимации
-			if (HeroCurrentFrame > 3) HeroCurrentFrame -= 3; //проходимся по кадрам с первого по третий включительно. если пришли к третьему кадру - откидываемся назад.
-			Hero.sprite.setTextureRect(IntRect(48 * int(HeroCurrentFrame), 0, 48, 48)); //проходимся по координатам Х. получается 96,96*2,96*3 и опять 96
-		}
-
+		playerPosition(Hero.getPlayerPositionX(), Hero.getPlayerPositionY());
 		Hero.update(time);
 
-
-		window.clear();
+		//changeview();
+		viewMap(time);
+		window.setView(view);
+		window.clear(Color(87, 113, 156));
 
 		for (int i = 0; i < HEIGHT_MAP; i++)
 			for (int j = 0; j < WIDTH_MAP; j++)
 			{
 				if (TileMap[i][j] == ' ') mapSprite.setTextureRect(IntRect(681, 104, 32, 32));
 				if (TileMap[i][j] == '0') mapSprite.setTextureRect(IntRect(23, 135, 32, 32));
-				if (TileMap[i][j] == '1') mapSprite.setTextureRect(IntRect(21, 135, 32, 32));
+				if (TileMap[i][j] == '1') mapSprite.setTextureRect(IntRect(310, 80, 32, 32));
+				if (TileMap[i][j] == 'm') mapSprite.setTextureRect(IntRect(360, 80, 32, 32));
+				if (TileMap[i][j] == 'h') mapSprite.setTextureRect(IntRect(335, 160, 32, 32));
 
 				mapSprite.setPosition(j * 32, i * 32);
 				window.draw(mapSprite);
 			}
+
+		std::ostringstream playerHealthString;    // объявили переменную
+		playerHealthString << Hero.health;		//занесли в нее число очков, то есть формируем строку
+		text.setString("Health: " + playerHealthString.str());//задаем строку тексту и вызываем сформированную выше строку методом .str() 
+		text.setPosition(view.getCenter().x - 165, view.getCenter().y - 200);//задаем позицию текста, отступая от центра камеры
+		window.draw(text);//рисую этот текст
 
 
 		window.draw(Hero.sprite);
